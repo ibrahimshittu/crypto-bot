@@ -27,6 +27,10 @@ def build_trading_deps(settings: Settings) -> TradingDeps:
     deps.max_symbols = settings.universe_max_symbols or None  # 0 = scan the entire universe
     deps.max_candidates = settings.max_candidates
     deps.max_new_orders_per_cycle = settings.max_new_orders_per_cycle
+    if settings.database_url:
+        from data.db.ohlcv import PostgresOhlcvStore
+
+        deps.ohlcv_store = PostgresOhlcvStore(settings)
 
     if settings.exa_api_key:
         try:

@@ -93,6 +93,11 @@ class Orchestrator:
                 break
 
             klines = await fetch_klines(d.exchange, cand)
+            if d.ohlcv_store is not None:
+                try:
+                    await d.ohlcv_store.save(cand.symbol, cand.category, "60", klines)
+                except Exception:
+                    pass
             cand = await _enrich_candidate(d, cand, klines)
             sentiment = await d.sentiment_reasoner.assess(cand.symbol)
             decision = await d.strategy_reasoner.decide(cand, klines, sentiment)

@@ -38,6 +38,7 @@ class TradingDeps:
     require_validation: bool = True
     validation_n_trials: int = 25
     health_min_trades: int = 20
+    ohlcv_store: object = None          # OhlcvStore | None — persist history when set
 
     def __post_init__(self) -> None:
         if self.workflow is None:
