@@ -1,0 +1,9 @@
+Symbol: {{ symbol }} ({{ category }})
+Scanner: {{ rationale }} | suggested strategy '{{ strategy }}'
+Market: last {{ last_price }} | realized vol {{ vol }}% annualized | trend {{ trend }} | z-score {{ zscore }}
+Sentiment: score {{ sent_score }} confidence {{ sent_conf }} — {{ facts }}
+
+Decide whether and how to trade {{ symbol }}. Read the '{{ strategy }}' and 'risk' skills,
+consult deterministic_signal() and indicators(), then return a StrategyDecision with
+entry_price, stop_price, take_profit, target_position in [-1, 1], leverage 1..{{ ceiling }}x,
+confidence and rationale. Set target_position = 0 to decline.

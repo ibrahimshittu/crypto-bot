@@ -1,0 +1,155 @@
+"""Orchestrator — runs one full decision cycle."""
+
+from __future__ import annotations
+
+from agents.deps import TradingDeps
+from agents.reasoners import fetch_klines
+from agents.schemas import CycleDecision
+from core.execution.exchange import OrderRequest
+from core.execution.rounding import floor_to_step, round_to_tick
+from core.risk.state import PortfolioState, Position
+
+
+class Orchestrator:
+    def __init__(self, deps: TradingDeps):
+        self.deps = deps
+
+    async def _portfolio(self) -> PortfolioState:
+        bal = await self.deps.exchange.get_balance()
+        positions = await self.deps.exchange.get_positions(self.deps.category)
+        risk_positions = [
+            Position(
+                symbol=p.symbol, qty=p.signed_size, entry_price=p.entry_price,
+                leverage=p.leverage,
+            )
+            for p in positions
+        ]
+        # start_of_day_equity should come from persisted state; fall back to equity.
+        sod = getattr(self, "_sod_equity", None) or bal.total_equity
+        return PortfolioState(
+            equity=bal.total_equity, start_of_day_equity=sod, positions=risk_positions
+        )
+
+    def set_start_of_day_equity(self, equity: float) -> None:
+        self._sod_equity = equity
+
+    async def run_cycle(self) -> CycleDecision:
+        d = self.deps
+        session = d.clock.now()
+        notes: list[str] = [f"session={session.label} liq={session.liquidity_score:.2f}"]
+
+        from data.market.snapshots import build_universe_snapshots
+
+        snapshots = await build_universe_snapshots(
+            d.exchange, d.category, max_symbols=d.max_symbols
+        )
+        candidates = d.scanner.top(snapshots, n=d.max_candidates)
+        notes.append(f"{len(snapshots)} scanned → {len(candidates)} candidates")
+
+        instruments = {i.symbol: i for i in await d.exchange.get_instruments(d.category)}
+
+        portfolio = await self._portfolio()
+        if portfolio.daily_pnl_pct <= -abs(d.settings.daily_loss_halt_pct):
+            notes.append(f"HALT: daily P&L {portfolio.daily_pnl_pct:.2f}% tripped breaker")
+            return CycleDecision(
+                session_label=session.label, liquidity_score=session.liquidity_score,
+                n_candidates=len(candidates), n_signals=0, n_orders=0,
+                n_pending_approval=0, notes=notes,
+            )
+
+        n_signals = n_orders = 0
+        for cand in candidates:
+            if n_orders >= d.max_new_orders_per_cycle:
+                notes.append(f"reached max {d.max_new_orders_per_cycle} new orders/cycle")
+                break
+
+            klines = await fetch_klines(d.exchange, cand)
+            sentiment = await d.sentiment_reasoner.assess(cand.symbol)
+            decision = await d.strategy_reasoner.decide(cand, klines, sentiment)
+            if decision is None:
+                continue
+            if abs(decision.target_position) < 1e-9:  # LLM declined the trade
+                notes.append(f"{cand.symbol} declined by strategy reasoner")
+                continue
+            if decision.strategy_id == "funding_carry_basis":  # needs delta-neutral two-leg path
+                notes.append(f"{cand.symbol} skipped: carry needs delta-neutral execution")
+                continue
+            n_signals += 1
+
+            inst = instruments.get(cand.symbol)
+
+            # The risk engine is the veto/sizing gate and enforces exchange minimums.
+            ob = await d.exchange.get_orderbook(cand.symbol, cand.category, depth=50)
+            risk = d.risk.evaluate(
+                portfolio=portfolio,
+                symbol=decision.symbol,
+                side="Buy" if decision.target_position > 0 else "Sell",
+                entry_price=decision.entry_price,
+                stop_price=decision.stop_price,
+                leverage=decision.leverage,
+                depth_notional=ob.depth_notional_within(0.01),
+                min_order_qty=inst.min_order_qty if inst else 0.0,
+                min_order_notional=inst.min_order_notional if inst else 0.0,
+            )
+            if not risk.approved or risk.sizing is None:
+                notes.append(f"{cand.symbol} vetoed: {'; '.join(risk.reasons)}")
+                if risk.halt_trading:
+                    break
+                continue
+
+            # Never order without a known lot step — we can't round qty safely.
+            if inst is None:
+                notes.append(f"{cand.symbol} skipped: no instrument spec (lot step unknown)")
+                continue
+            # Round qty to the lot step and prices to the tick size, or Bybit rejects it.
+            qty = floor_to_step(risk.sizing.qty, inst.qty_step)
+            if inst.min_order_qty and qty < inst.min_order_qty:
+                notes.append(
+                    f"{cand.symbol} skipped: rounded qty {qty} < min {inst.min_order_qty}"
+                )
+                continue
+            tick = inst.tick_size
+            side = "Buy" if decision.target_position > 0 else "Sell"
+
+            # Use the risk engine's ENFORCED (clamped) leverage, not the strategy's raw
+            # proposal — this is the hard cap the LLM can't exceed.
+            leverage = risk.leverage
+
+            # Apply leverage on the symbol first — Bybit's max position size depends on it
+            # (risk-limit tiers). Best-effort: a failure here shouldn't block the cycle.
+            if cand.category in ("linear", "inverse"):
+                try:
+                    await d.exchange.set_leverage(cand.symbol, cand.category, leverage)
+                except Exception as e:
+                    notes.append(f"{cand.symbol} set_leverage failed: {e}")
+                    continue
+
+            # Order workflow is auto on demo, approval-gated on live.
+            req = OrderRequest(
+                symbol=decision.symbol,
+                category=cand.category,
+                side=side,
+                order_type="Market",
+                qty=qty,
+                leverage=leverage,
+                take_profit=round_to_tick(decision.take_profit, tick) if decision.take_profit else None,
+                stop_loss=round_to_tick(decision.stop_price, tick),
+                strategy_id=decision.strategy_id,
+            )
+            assert d.workflow is not None
+            ticket = await d.workflow.submit(req)
+            n_orders += 1
+            notes.append(
+                f"{cand.symbol} {decision.action} qty={req.qty} → {ticket.status.value}"
+            )
+
+        pending = len(d.workflow.pending()) if d.workflow else 0
+        return CycleDecision(
+            session_label=session.label,
+            liquidity_score=session.liquidity_score,
+            n_candidates=len(candidates),
+            n_signals=n_signals,
+            n_orders=n_orders,
+            n_pending_approval=pending,
+            notes=notes,
+        )
