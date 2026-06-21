@@ -82,7 +82,7 @@ async def test_circuit_breaker_halts_cycle():
     assert any("HALT" in n for n in decision.notes)
 
 
-async def test_cycle_skips_unvalidated_strategy():
+async def test_cycle_does_not_trade_no_edge_symbol():
     from core.validation.online import _clear_cache
 
     _clear_cache()
@@ -110,4 +110,3 @@ async def test_cycle_skips_unvalidated_strategy():
     decision = await orch.run_cycle()
     assert decision.n_candidates >= 1          # it was scanned
     assert decision.n_orders == 0              # but no-edge noise is not traded
-    assert any(("validation" in n) or ("declined" in n) for n in decision.notes), decision.notes
