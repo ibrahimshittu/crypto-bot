@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 from agents.deps import TradingDeps
 from agents.reasoners import fetch_klines
 from agents.schemas import CycleDecision
+from core.analysis.features import multiframe_confluence
 from core.execution.exchange import OrderRequest
 from core.execution.rounding import floor_to_step, round_to_tick
 from core.validation.online import validate_recent
 from core.risk.state import PortfolioState, Position
+
+
+async def _with_confluence(deps: TradingDeps, cand, klines):
+    """Attach multi-timeframe confluence (4h/1d trend agreement) to the candidate."""
+    try:
+        k4h = await deps.exchange.get_kline(cand.symbol, cand.category, interval="240", limit=200)
+        k1d = await deps.exchange.get_kline(cand.symbol, cand.category, interval="D", limit=200)
+        conf = multiframe_confluence(klines, k4h, k1d)["confluence"]
+    except Exception:
+        return cand
+    return dataclasses.replace(cand, snapshot=dataclasses.replace(cand.snapshot, mtf_confluence=conf))
 
 
 class Orchestrator:
@@ -65,6 +79,7 @@ class Orchestrator:
                 break
 
             klines = await fetch_klines(d.exchange, cand)
+            cand = await _with_confluence(d, cand, klines)
             sentiment = await d.sentiment_reasoner.assess(cand.symbol)
             decision = await d.strategy_reasoner.decide(cand, klines, sentiment)
             if decision is None:

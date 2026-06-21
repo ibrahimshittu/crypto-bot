@@ -27,6 +27,7 @@ class InstrumentSnapshot:
     age_hours: float = 10_000.0         # hours since listing
     regime: str = "neutral"             # trending | ranging | neutral
     preferred_family: str = ""          # directional | market_neutral
+    mtf_confluence: int = 0             # 0–3 timeframes agreeing with the 1h trend
 
 
 @dataclass(frozen=True)
