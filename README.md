@@ -17,6 +17,47 @@ position sizing from **live capital**, risk circuit-breakers, and order executio
 This split exists because the research is blunt that LLMs are weak as the raw *signal*
 (see StockBench, arXiv 2510.02209) — so we use them as orchestrators, not oracles.
 
+## Architecture
+
+```text
+┌───────────────────────────────────────────────────────────────────────────┐
+│  CONTROL PLANE — app/  (FastAPI)                                            │
+│  REST + WebSocket · /engine/{start,stop,run-once,status} · /orders/approve  │
+│  EngineState — runs one cycle every CYCLE_SECONDS, resumable via Redis       │
+└───────────────────────────────┬───────────────────────────────────────────┘
+                                 │ run_cycle()  (one cycle = one full pass)
+┌───────────────────────────────▼───────────────────────────────────────────┐
+│  ORCHESTRATOR — agents/                                                     │
+│                                                                            │
+│   SCAN ──▶ SENTIMENT ──▶ DECIDE ──▶ RISK ENGINE ──▶ ROUND ──▶ ORDER         │
+│    │           │            │            │            │          │          │
+│    ▼           ▼            ▼            ▼            ▼          ▼          │
+│  scanner     Exa       LLM-first     veto + size   lot/tick   workflow      │
+│  + gates   sentiment   + skills      from LIVE     rounding   demo: fill    │
+│            (Exa API)   (OpenRouter)  equity                   live: approve │
+└─────┬──────────┬───────────┬──────────────┬───────────────────────┬────────┘
+      │          │           │              │                       │
+      ▼          ▼           ▼              ▼                       ▼
+┌──────────┐ ┌────────┐ ┌──────────┐  ┌───────────┐          ┌────────────┐
+│ DETERMIN-│ │  Exa   │ │OpenRouter│  │  RISK /    │          │   Bybit    │
+│ ISTIC    │ │  API   │ │(minimax) │  │  RULES     │          │ spot/perps │
+│ CORE     │ └────────┘ └──────────┘  │ (deterministic)       │ (pybit)    │
+│ core/    │                          └───────────┘          └────────────┘
+│ strategies · validation gate (deflated Sharpe) · risk · sessions ·         │
+│ screener · execution · rounding                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  KNOWLEDGE  knowledge/*.md  ──▶ loaded as agent SKILLS (Pydantic AI capabilities)
+  MEMORY     memory/         trade journal + reflection (self-improvement loop)
+  STORAGE    TimescaleDB (journal · OHLCV)   ·   Redis (engine state · cycle log)
+  OBSERVE    Logfire — every cycle, agent run, and LLM / Exa / Bybit call is traced
+```
+
+**The flow in one line:** the control plane runs the orchestrator once per cycle; the
+orchestrator scans the market, gets Exa sentiment, asks the LLM to decide (using the
+deterministic strategy signal + the `knowledge/` skills as aids), then the **deterministic
+risk engine** sizes/vetoes the trade before it ever reaches Bybit.
+
 ## Key safety properties
 
 - **Capital-aware sizing**: every order is a fraction of *current equity* (read live
