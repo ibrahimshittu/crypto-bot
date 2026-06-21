@@ -37,6 +37,7 @@ class TradingDeps:
     max_new_orders_per_cycle: int = 3
     require_validation: bool = True
     validation_n_trials: int = 25
+    health_min_trades: int = 20
 
     def __post_init__(self) -> None:
         if self.workflow is None:

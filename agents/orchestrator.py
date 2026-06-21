@@ -8,6 +8,7 @@ from agents.deps import TradingDeps
 from agents.reasoners import fetch_klines
 from agents.schemas import CycleDecision
 from core.analysis.features import multiframe_confluence
+from core.analysis.health import strategy_health
 from core.execution.exchange import OrderRequest
 from core.execution.rounding import floor_to_step, round_to_tick
 from core.validation.online import validate_recent
@@ -89,6 +90,10 @@ class Orchestrator:
                 continue
             if decision.strategy_id == "funding_carry_basis":  # needs delta-neutral two-leg path
                 notes.append(f"{cand.symbol} skipped: carry needs delta-neutral execution")
+                continue
+            if strategy_health(await d.journal.recent_trades(200), decision.strategy_id,
+                               min_trades=d.health_min_trades).benched:
+                notes.append(f"{cand.symbol} skipped: {decision.strategy_id} benched (decaying edge)")
                 continue
             if d.require_validation:
                 rv = validate_recent(decision.strategy_id, cand.symbol, klines,
