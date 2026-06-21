@@ -27,6 +27,9 @@ async def build_snapshot(
     if len(klines) < 50:
         return None
 
+    from core.analysis.regime import classify_regime
+
+    regime = classify_regime(klines)
     return InstrumentSnapshot(
         symbol=ticker.symbol,
         category=ticker.category,
@@ -37,10 +40,12 @@ async def build_snapshot(
         move_1h_pct=ind.pct_move(klines, 1),
         move_24h_pct=ticker.price_24h_pct,
         volume_spike_ratio=ind.volume_spike_ratio(klines),
-        realized_vol_pct=ind.realized_vol_pct(klines),
+        realized_vol_pct=regime.realized_vol_pct,
         trend_score=ind.trend_score(klines),
         zscore=ind.zscore(klines),
         annualized_funding_pct=ticker.funding_rate * (24 / 8) * 365 * 100.0,
+        regime=regime.trend,
+        preferred_family=regime.preferred_family,
     )
 
 

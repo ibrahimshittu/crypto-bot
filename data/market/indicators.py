@@ -11,6 +11,73 @@ def _closes(klines: list[Kline]) -> np.ndarray:
     return np.array([k.close for k in klines], dtype=float)
 
 
+def hurst(klines: list[Kline], max_lag: int = 50) -> float:
+    """Hurst exponent of the close series. >0.5 trending, <0.5 mean-reverting, ~0.5 random."""
+    c = _closes(klines)
+    if len(c) < max_lag * 2:
+        max_lag = max(4, len(c) // 4)
+    lags = np.arange(2, max_lag)
+    tau = []
+    for lag in lags:
+        diff = c[lag:] - c[:-lag]
+        sd = diff.std()
+        tau.append(sd if sd > 1e-12 else 1e-12)
+    slope = np.polyfit(np.log(lags), np.log(tau), 1)[0]
+    return float(slope)
+
+
+def adx(klines: list[Kline], period: int = 14) -> float:
+    """Wilder's Average Directional Index (0–100). >25 indicates a real trend."""
+    if len(klines) < period * 2 + 1:
+        return 0.0
+    high = np.array([k.high for k in klines])
+    low = np.array([k.low for k in klines])
+    close = np.array([k.close for k in klines])
+    up = high[1:] - high[:-1]
+    down = low[:-1] - low[1:]
+    plus_dm = np.where((up > down) & (up > 0), up, 0.0)
+    minus_dm = np.where((down > up) & (down > 0), down, 0.0)
+    tr = np.maximum.reduce([
+        high[1:] - low[1:],
+        np.abs(high[1:] - close[:-1]),
+        np.abs(low[1:] - close[:-1]),
+    ])
+
+    def _smooth(x):
+        out = np.zeros_like(x)
+        out[period - 1] = x[:period].sum()
+        for i in range(period, len(x)):
+            out[i] = out[i - 1] - out[i - 1] / period + x[i]
+        return out[period - 1:]
+
+    tr_s, plus_s, minus_s = _smooth(tr), _smooth(plus_dm), _smooth(minus_dm)
+    tr_s = np.where(tr_s == 0, 1e-12, tr_s)
+    plus_di = 100 * plus_s / tr_s
+    minus_di = 100 * minus_s / tr_s
+    denom = np.where((plus_di + minus_di) == 0, 1e-12, plus_di + minus_di)
+    dx = 100 * np.abs(plus_di - minus_di) / denom
+    return float(dx[-period:].mean()) if len(dx) >= period else float(dx.mean())
+
+
+def choppiness(klines: list[Kline], period: int = 14) -> float:
+    """Choppiness Index (0–100). >61 ranging/choppy, <38 trending."""
+    if len(klines) < period + 1:
+        return 50.0
+    high = np.array([k.high for k in klines])
+    low = np.array([k.low for k in klines])
+    close = np.array([k.close for k in klines])
+    tr = np.maximum.reduce([
+        high[1:] - low[1:],
+        np.abs(high[1:] - close[:-1]),
+        np.abs(low[1:] - close[:-1]),
+    ])
+    tr_sum = tr[-period:].sum()
+    rng = high[-period:].max() - low[-period:].min()
+    if rng <= 0 or tr_sum <= 0:
+        return 50.0
+    return float(100 * np.log10(tr_sum / rng) / np.log10(period))
+
+
 def atr(klines: list[Kline], period: int = 14) -> float:
     """Average True Range over the last `period` bars."""
     n = min(period, len(klines) - 1)

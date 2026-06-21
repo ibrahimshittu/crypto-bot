@@ -66,6 +66,14 @@ def test_rich_funding_suggests_carry():
     assert out[0].suggested_strategy == "funding_carry_basis"
 
 
+def test_regime_routes_strategy():
+    # Same weak trend + z-score, but a ranging regime should prefer mean-reversion.
+    ranging = _snap(symbol="RANGEUSDT", trend_score=0.3, zscore=2.5, annualized_funding_pct=0.5,
+                    regime="ranging", preferred_family="market_neutral")
+    out = UniverseScanner().top([ranging])
+    assert out[0].suggested_strategy == "mean_reversion_statarb"
+
+
 def test_ranking_orders_by_score():
     strong = _snap(symbol="STRONGUSDT", trend_score=0.95, annualized_funding_pct=0.5)
     weak = _snap(symbol="WEAKUSDT", trend_score=0.05, annualized_funding_pct=0.5, zscore=0.1)

@@ -25,6 +25,8 @@ class InstrumentSnapshot:
     zscore: float                       # mean-reversion z-score of price vs rolling mean
     annualized_funding_pct: float = 0.0
     age_hours: float = 10_000.0         # hours since listing
+    regime: str = "neutral"             # trending | ranging | neutral
+    preferred_family: str = ""          # directional | market_neutral
 
 
 @dataclass(frozen=True)
@@ -51,14 +53,19 @@ class UniverseScanner:
         trend = abs(snap.trend_score)
         revert = max(0.0, abs(snap.zscore) - 1.5)
 
+        # Regime boosts the strategy family that fits the current market.
+        family = {"momentum_trend": "directional", "mean_reversion_statarb": "market_neutral"}
+        def boost(strat_id: str) -> float:
+            return 1.5 if snap.preferred_family and family.get(strat_id) == snap.preferred_family else 1.0
+
         options = [
             ("funding_carry_basis", carry / 10.0, f"funding {snap.annualized_funding_pct:+.1f}% annualized"),
-            ("momentum_trend", trend, f"trend score {snap.trend_score:+.2f}"),
-            ("mean_reversion_statarb", revert * 0.5, f"z-score {snap.zscore:+.2f}"),
+            ("momentum_trend", trend * boost("momentum_trend"), f"trend score {snap.trend_score:+.2f}"),
+            ("mean_reversion_statarb", revert * 0.5 * boost("mean_reversion_statarb"), f"z-score {snap.zscore:+.2f}"),
         ]
         strat, raw, why = max(options, key=lambda o: o[1])
         score = raw * (0.5 + 0.5 * liq_quality)
-        return strat, score, why
+        return strat, score, f"{why} [{snap.regime}]"
 
     def scan(self, snapshots: list[InstrumentSnapshot]) -> list[Candidate]:
         """Return ranked candidates (survivors first by score desc; rejected flagged at end)."""

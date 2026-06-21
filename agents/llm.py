@@ -86,6 +86,7 @@ class LLMStrategyReasoner:
             rationale=candidate.rationale, strategy=candidate.suggested_strategy,
             last_price=snap.last_price, vol=round(snap.realized_vol_pct),
             trend=round(snap.trend_score, 2), zscore=round(snap.zscore, 2),
+            regime=snap.regime,
             sent_score=sentiment.sentiment_score, sent_conf=sentiment.confidence,
             facts=sentiment.fact_summary, ceiling=self.ceiling,
         )

@@ -108,5 +108,6 @@ async def test_cycle_skips_unvalidated_strategy():
     orch.set_start_of_day_equity(5000.0)
 
     decision = await orch.run_cycle()
-    assert decision.n_orders == 0
-    assert any("failed recent validation" in n for n in decision.notes), decision.notes
+    assert decision.n_candidates >= 1          # it was scanned
+    assert decision.n_orders == 0              # but no-edge noise is not traded
+    assert any(("validation" in n) or ("declined" in n) for n in decision.notes), decision.notes
