@@ -1,6 +1,7 @@
 """Multi-timeframe confluence + crypto/stationary features."""
 
 import numpy as np
+import pytest
 
 from core.analysis.features import (
     basis_pct,
@@ -49,5 +50,5 @@ def test_order_book_imbalance():
 
 def test_derivatives_helpers():
     assert funding_trend([0.01, 0.02, 0.03, 0.05]) > 0       # rising funding
-    assert oi_change_pct([1000, 1100]) == 10.0               # +10% OI
-    assert basis_pct(101.0, 100.0) == 1.0                    # 1% contango
+    assert oi_change_pct([1000, 1100]) == pytest.approx(10.0)   # +10% OI
+    assert basis_pct(101.0, 100.0) == pytest.approx(1.0)        # 1% contango
