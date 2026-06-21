@@ -7,8 +7,10 @@ import dataclasses
 from agents.deps import TradingDeps
 from agents.reasoners import fetch_klines
 from agents.schemas import CycleDecision
+from core.analysis.edge import estimate_edge
 from core.analysis.features import multiframe_confluence
 from core.analysis.health import strategy_health
+from core.risk.sizing import edge_scaled_size
 from core.execution.exchange import OrderRequest
 from core.execution.rounding import floor_to_step, round_to_tick
 from core.validation.online import validate_recent
@@ -124,12 +126,16 @@ class Orchestrator:
                     break
                 continue
 
+            # Scale the risk-approved size by the strategy's estimated edge.
+            edge = estimate_edge(klines, decision.strategy_id)
+            sizing = edge_scaled_size(risk.sizing, edge.kelly_fraction)
+
             # Never order without a known lot step — we can't round qty safely.
             if inst is None:
                 notes.append(f"{cand.symbol} skipped: no instrument spec (lot step unknown)")
                 continue
             # Round qty to the lot step and prices to the tick size, or Bybit rejects it.
-            qty = floor_to_step(risk.sizing.qty, inst.qty_step)
+            qty = floor_to_step(sizing.qty, inst.qty_step)
             if inst.min_order_qty and qty < inst.min_order_qty:
                 notes.append(
                     f"{cand.symbol} skipped: rounded qty {qty} < min {inst.min_order_qty}"

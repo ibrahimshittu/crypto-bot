@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 
@@ -12,6 +13,19 @@ class SizingResult:
     risk_amount: float          # quote currency at risk if stop is hit
     reason: str
     ok: bool = True
+
+
+def edge_scaled_size(base: SizingResult, kelly_fraction: float, *,
+                     reference: float = 0.02, lo: float = 0.5, hi: float = 2.0) -> SizingResult:
+    """Scale a base (fixed-fractional) size by the estimated edge: stronger edge → bigger
+    (capped at `hi`), weaker → smaller (floored at `lo`). `reference` is a 'decent edge' anchor."""
+    if not base.ok or reference <= 0:
+        return base
+    mult = max(lo, min(hi, kelly_fraction / reference))
+    return dataclasses.replace(
+        base, qty=base.qty * mult, notional=base.notional * mult,
+        risk_amount=base.risk_amount * mult, reason=f"{base.reason}; edge×{mult:.2f}",
+    )
 
 
 def fractional_kelly(win_rate: float, win_loss_ratio: float, fraction: float = 0.2) -> float:
