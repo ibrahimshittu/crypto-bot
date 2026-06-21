@@ -1,0 +1,39 @@
+# Runtime dependencies for crypto_bot.
+# Install into your virtualenv:  pip install -r requirements.txt
+# (mirrors [project].dependencies in pyproject.toml)
+
+# --- Agent framework + LLM (OpenRouter via the OpenAI-compatible provider) ---
+pydantic-ai-slim[openai,mcp]>=0.0.49
+pydantic>=2.9
+pydantic-settings>=2.5
+
+# --- API / control plane ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+websockets>=12.0
+
+# --- Data / numerics ---
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13
+
+# --- Exchange ---
+pybit>=5.7
+httpx>=0.27
+
+# --- News / sentiment ---
+exa-py>=1.0
+
+# --- Cloud datastores / queue ---
+asyncpg>=0.29
+sqlalchemy>=2.0
+redis>=5.0
+arq>=0.26
+
+# --- Observability ---
+logfire>=0.50
+
+# --- Misc ---
+pyyaml>=6.0
+jinja2>=3.1
+certifi>=2024.2.2          # CA bundle for TLS to Upstash (rediss://) / Timescale Cloud

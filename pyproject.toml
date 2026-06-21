@@ -1,0 +1,78 @@
+[project]
+name = "crypto-bot"
+version = "0.1.0"
+description = "Autonomous, self-improving AI crypto trading service on Bybit (Pydantic AI + FastAPI)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "crypto_bot" }]
+
+dependencies = [
+    # --- Agent framework + LLM ---
+    "pydantic-ai-slim[anthropic,openai,mcp]>=0.0.49",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    # --- API / control plane ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "websockets>=12.0",
+    # --- Data / numerics ---
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scipy>=1.13",
+    # --- Exchange ---
+    "pybit>=5.7",
+    "httpx>=0.27",
+    # --- News / sentiment ---
+    "exa-py>=1.0",
+    # --- Storage / queue ---
+    "asyncpg>=0.29",
+    "sqlalchemy>=2.0",
+    "redis>=5.0",
+    "arq>=0.26",
+    # --- Observability ---
+    "logfire>=0.50",
+    # --- Misc ---
+    "pyyaml>=6.0",
+    "certifi>=2024.2.2",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+# Heavier / optional research + TA libs kept separate so the core installs fast.
+research = [
+    "pandas-ta>=0.3.14b0",
+    "statsmodels>=0.14",
+    "vectorbt>=0.26",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "agents", "app", "data", "memory"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
