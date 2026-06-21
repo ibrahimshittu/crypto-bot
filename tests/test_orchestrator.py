@@ -38,7 +38,8 @@ def _seed_trending_symbol(ex: PaperExchange, symbol="TRNDUSDT") -> None:
 async def test_cycle_produces_order_on_demo():
     ex = PaperExchange(starting_equity=5000.0)
     _seed_trending_symbol(ex)
-    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.DEMO))
+    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.DEMO),
+                       require_validation=False)
     orch = Orchestrator(deps)
     orch.set_start_of_day_equity(5000.0)
 
@@ -55,7 +56,8 @@ async def test_cycle_produces_order_on_demo():
 async def test_cycle_holds_for_approval_on_live():
     ex = PaperExchange(starting_equity=5000.0)
     _seed_trending_symbol(ex)
-    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.LIVE))
+    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.LIVE),
+                       require_validation=False)
     orch = Orchestrator(deps)
     orch.set_start_of_day_equity(5000.0)
 
@@ -70,10 +72,41 @@ async def test_circuit_breaker_halts_cycle():
     ex = PaperExchange(starting_equity=4000.0)  # equity already down
     _seed_trending_symbol(ex)
     deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.DEMO,
-                                                      daily_loss_halt_pct=5.0))
+                                                      daily_loss_halt_pct=5.0),
+                       require_validation=False)
     orch = Orchestrator(deps)
     orch.set_start_of_day_equity(5000.0)  # -20% on the day → breaker
 
     decision = await orch.run_cycle()
     assert decision.n_orders == 0
     assert any("HALT" in n for n in decision.notes)
+
+
+async def test_cycle_skips_unvalidated_strategy():
+    from core.validation.online import _clear_cache
+
+    _clear_cache()
+    ex = PaperExchange(starting_equity=5000.0)
+    # A liquid symbol whose price is pure noise → momentum has no real edge.
+    rng = np.random.default_rng(7)
+    closes = np.cumprod(1 + rng.normal(0, 0.01, 400)) * 100
+    noisy = [
+        Kline(start_ms=i * 3600_000, open=c, high=c * 1.01, low=c * 0.99, close=c, volume=1000.0)
+        for i, c in enumerate(closes)
+    ]
+    ex.add_instrument(Instrument("NOISEUSDT", "linear", "NOISE", "USDT", 0.001, 0.001, max_leverage=10))
+    ex.set_ticker(Ticker("NOISEUSDT", "linear", last_price=float(closes[-1]), bid=closes[-1] * 0.999,
+                         ask=closes[-1] * 1.001, turnover_24h=5e8, volume_24h=1e6, funding_rate=0.0))
+    ex.set_orderbook(OrderBook("NOISEUSDT",
+                               bids=[(closes[-1] * 0.999 - i, 5000) for i in range(30)],
+                               asks=[(closes[-1] * 1.001 + i, 5000) for i in range(30)]))
+    ex.set_klines("NOISEUSDT", noisy)
+
+    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.DEMO),
+                       require_validation=True, validation_n_trials=50)
+    orch = Orchestrator(deps)
+    orch.set_start_of_day_equity(5000.0)
+
+    decision = await orch.run_cycle()
+    assert decision.n_orders == 0
+    assert any("failed recent validation" in n for n in decision.notes), decision.notes

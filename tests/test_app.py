@@ -23,7 +23,7 @@ def _engine(env=TradingEnv.DEMO) -> EngineState:
         Kline(i * 3600_000, c, c * 1.02, c * 0.98, c, 1000.0)
         for i, c in enumerate(np.linspace(100, 200, 120))
     ])
-    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=env))
+    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=env), require_validation=False)
     eng = EngineState(deps=deps, cycle_seconds=999)
     eng.orchestrator.set_start_of_day_equity(5000.0)
     return eng

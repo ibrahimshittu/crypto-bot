@@ -103,5 +103,5 @@ class MechanicalStrategyReasoner:
         )
 
 
-async def fetch_klines(exchange: ExchangeClient, candidate: Candidate, limit: int = 200) -> list[Kline]:
+async def fetch_klines(exchange: ExchangeClient, candidate: Candidate, limit: int = 500) -> list[Kline]:
     return await exchange.get_kline(candidate.symbol, candidate.category, interval="60", limit=limit)

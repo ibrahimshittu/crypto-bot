@@ -7,6 +7,7 @@ from agents.reasoners import fetch_klines
 from agents.schemas import CycleDecision
 from core.execution.exchange import OrderRequest
 from core.execution.rounding import floor_to_step, round_to_tick
+from core.validation.online import validate_recent
 from core.risk.state import PortfolioState, Position
 
 
@@ -74,6 +75,12 @@ class Orchestrator:
             if decision.strategy_id == "funding_carry_basis":  # needs delta-neutral two-leg path
                 notes.append(f"{cand.symbol} skipped: carry needs delta-neutral execution")
                 continue
+            if d.require_validation:
+                rv = validate_recent(decision.strategy_id, cand.symbol, klines,
+                                     n_trials=d.validation_n_trials)
+                if not rv.tradeable:
+                    notes.append(f"{cand.symbol} skipped: failed recent validation ({rv.reason})")
+                    continue
             n_signals += 1
 
             inst = instruments.get(cand.symbol)

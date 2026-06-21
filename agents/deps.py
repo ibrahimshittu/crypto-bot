@@ -35,6 +35,8 @@ class TradingDeps:
     max_symbols: int | None = 100
     max_candidates: int = 25
     max_new_orders_per_cycle: int = 3
+    require_validation: bool = True
+    validation_n_trials: int = 25
 
     def __post_init__(self) -> None:
         if self.workflow is None:
