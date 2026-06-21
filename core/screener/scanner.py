@@ -30,6 +30,8 @@ class InstrumentSnapshot:
     mtf_confluence: int = 0             # 0–3 timeframes agreeing with the 1h trend
     ob_imbalance: float = 0.0           # -1 ask-heavy … +1 bid-heavy
     frac_diff: float = 0.0              # fractionally-differentiated last close (stationary)
+    funding_trend: float = 0.0          # slope of recent annualized funding
+    oi_change_pct: float = 0.0          # % change in open interest
 
 
 @dataclass(frozen=True)

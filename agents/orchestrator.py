@@ -8,7 +8,7 @@ from agents.deps import TradingDeps
 from agents.reasoners import fetch_klines
 from agents.schemas import CycleDecision
 from core.analysis.edge import estimate_edge
-from core.analysis.features import multiframe_confluence
+from core.analysis.features import funding_trend, multiframe_confluence, oi_change_pct
 from core.analysis.health import strategy_health
 from core.risk.sizing import edge_scaled_size
 from core.execution.exchange import OrderRequest
@@ -17,15 +17,26 @@ from core.validation.online import validate_recent
 from core.risk.state import PortfolioState, Position
 
 
-async def _with_confluence(deps: TradingDeps, cand, klines):
-    """Attach multi-timeframe confluence (4h/1d trend agreement) to the candidate."""
+async def _enrich_candidate(deps: TradingDeps, cand, klines):
+    """Attach multi-timeframe confluence and live derivative features (funding trend, OI)."""
+    updates: dict = {}
     try:
         k4h = await deps.exchange.get_kline(cand.symbol, cand.category, interval="240", limit=200)
         k1d = await deps.exchange.get_kline(cand.symbol, cand.category, interval="D", limit=200)
-        conf = multiframe_confluence(klines, k4h, k1d)["confluence"]
+        updates["mtf_confluence"] = multiframe_confluence(klines, k4h, k1d)["confluence"]
     except Exception:
+        pass
+    if cand.category in ("linear", "inverse"):
+        try:
+            fh = await deps.exchange.get_funding_history(cand.symbol, cand.category, limit=50)
+            oi = await deps.exchange.get_open_interest(cand.symbol, cand.category, limit=50)
+            updates["funding_trend"] = funding_trend(fh)
+            updates["oi_change_pct"] = oi_change_pct(oi)
+        except Exception:
+            pass
+    if not updates:
         return cand
-    return dataclasses.replace(cand, snapshot=dataclasses.replace(cand.snapshot, mtf_confluence=conf))
+    return dataclasses.replace(cand, snapshot=dataclasses.replace(cand.snapshot, **updates))
 
 
 class Orchestrator:
@@ -82,7 +93,7 @@ class Orchestrator:
                 break
 
             klines = await fetch_klines(d.exchange, cand)
-            cand = await _with_confluence(d, cand, klines)
+            cand = await _enrich_candidate(d, cand, klines)
             sentiment = await d.sentiment_reasoner.assess(cand.symbol)
             decision = await d.strategy_reasoner.decide(cand, klines, sentiment)
             if decision is None:

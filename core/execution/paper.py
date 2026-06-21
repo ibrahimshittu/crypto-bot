@@ -29,6 +29,8 @@ class PaperExchange:
         self._books: dict[str, OrderBook] = {}
         self._positions: dict[str, Position] = {}
         self._klines: dict[str, list[Kline]] = {}
+        self._funding: dict[str, list[float]] = {}
+        self._oi: dict[str, list[float]] = {}
         self._ids = itertools.count(1)
 
     def add_instrument(self, inst: Instrument) -> None:
@@ -42,6 +44,12 @@ class PaperExchange:
 
     def set_klines(self, symbol: str, klines: list[Kline]) -> None:
         self._klines[symbol] = klines
+
+    def set_funding_history(self, symbol: str, rates: list[float]) -> None:
+        self._funding[symbol] = rates
+
+    def set_open_interest(self, symbol: str, oi: list[float]) -> None:
+        self._oi[symbol] = oi
 
     async def get_instruments(self, category: Category) -> list[Instrument]:
         return [i for (s, c), i in self._instruments.items() if c == category]
@@ -59,6 +67,14 @@ class PaperExchange:
 
     async def get_orderbook(self, symbol: str, category: Category, depth: int = 50) -> OrderBook:
         return self._books.get(symbol, OrderBook(symbol=symbol, bids=[], asks=[]))
+
+    async def get_funding_history(self, symbol: str, category: Category, limit: int = 50) -> list[float]:
+        return self._funding.get(symbol, [])[-limit:]
+
+    async def get_open_interest(
+        self, symbol: str, category: Category, interval: str = "1h", limit: int = 50
+    ) -> list[float]:
+        return self._oi.get(symbol, [])[-limit:]
 
     async def get_balance(self) -> Balance:
         return Balance(total_equity=self._equity, available=self._available)

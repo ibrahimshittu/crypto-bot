@@ -128,6 +128,29 @@ class BybitClient:
             asks=[(float(p), float(s)) for p, s in r.get("a", [])],
         )
 
+    async def get_funding_history(self, symbol: str, category: Category, limit: int = 50) -> list[float]:
+        if category not in ("linear", "inverse"):
+            return []
+        resp = await self._call(
+            self._http.get_funding_rate_history, category=category, symbol=symbol, limit=limit
+        )
+        rates = [float(r.get("fundingRate", 0) or 0) for r in resp["result"]["list"]]
+        rates.reverse()  # oldest-first
+        return rates
+
+    async def get_open_interest(
+        self, symbol: str, category: Category, interval: str = "1h", limit: int = 50
+    ) -> list[float]:
+        if category not in ("linear", "inverse"):
+            return []
+        resp = await self._call(
+            self._http.get_open_interest, category=category, symbol=symbol,
+            intervalTime=interval, limit=limit,
+        )
+        oi = [float(r.get("openInterest", 0) or 0) for r in resp["result"]["list"]]
+        oi.reverse()  # oldest-first
+        return oi
+
     async def get_balance(self) -> Balance:
         resp = await self._call(self._http.get_wallet_balance, accountType="UNIFIED")
         acct = resp["result"]["list"][0]
