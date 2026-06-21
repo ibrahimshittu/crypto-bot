@@ -30,6 +30,8 @@ class BybitClient:
         kwargs: dict[str, Any] = {
             "api_key": self.s.bybit_api_key,
             "api_secret": self.s.bybit_api_secret,
+            "timeout": 30,
+            "max_retries": 3,
         }
         if self.s.trading_env == TradingEnv.DEMO:
             kwargs["demo"] = True
