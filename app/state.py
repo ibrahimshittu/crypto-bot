@@ -51,6 +51,7 @@ class EngineState:
                         "signals": decision.n_signals,
                         "orders": decision.n_orders,
                         "session": decision.session_label,
+                        "notes": decision.notes,
                     })
             self.history.append(decision)
             self.cycles_completed = n

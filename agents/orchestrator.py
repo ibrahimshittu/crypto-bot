@@ -10,6 +10,7 @@ from agents.schemas import CycleDecision
 from core.analysis.edge import estimate_edge
 from core.analysis.features import funding_trend, multiframe_confluence, oi_change_pct
 from core.analysis.health import strategy_health
+from core.observability import span
 from core.risk.sizing import edge_scaled_size
 from core.execution.exchange import OrderRequest
 from core.execution.rounding import floor_to_step, round_to_tick
@@ -20,20 +21,21 @@ from core.risk.state import PortfolioState, Position
 async def _enrich_candidate(deps: TradingDeps, cand, klines):
     """Attach multi-timeframe confluence and live derivative features (funding trend, OI)."""
     updates: dict = {}
-    try:
-        k4h = await deps.exchange.get_kline(cand.symbol, cand.category, interval="240", limit=200)
-        k1d = await deps.exchange.get_kline(cand.symbol, cand.category, interval="D", limit=200)
-        updates["mtf_confluence"] = multiframe_confluence(klines, k4h, k1d)["confluence"]
-    except Exception:
-        pass
-    if cand.category in ("linear", "inverse"):
+    with span("analysis.enrich", symbol=cand.symbol, regime=cand.snapshot.regime):
         try:
-            fh = await deps.exchange.get_funding_history(cand.symbol, cand.category, limit=50)
-            oi = await deps.exchange.get_open_interest(cand.symbol, cand.category, limit=50)
-            updates["funding_trend"] = funding_trend(fh)
-            updates["oi_change_pct"] = oi_change_pct(oi)
+            k4h = await deps.exchange.get_kline(cand.symbol, cand.category, interval="240", limit=200)
+            k1d = await deps.exchange.get_kline(cand.symbol, cand.category, interval="D", limit=200)
+            updates["mtf_confluence"] = multiframe_confluence(klines, k4h, k1d)["confluence"]
         except Exception:
             pass
+        if cand.category in ("linear", "inverse"):
+            try:
+                fh = await deps.exchange.get_funding_history(cand.symbol, cand.category, limit=50)
+                oi = await deps.exchange.get_open_interest(cand.symbol, cand.category, limit=50)
+                updates["funding_trend"] = funding_trend(fh)
+                updates["oi_change_pct"] = oi_change_pct(oi)
+            except Exception:
+                pass
     if not updates:
         return cand
     return dataclasses.replace(cand, snapshot=dataclasses.replace(cand.snapshot, **updates))
@@ -114,8 +116,9 @@ class Orchestrator:
                 notes.append(f"{cand.symbol} skipped: {decision.strategy_id} benched (decaying edge)")
                 continue
             if d.require_validation:
-                rv = validate_recent(decision.strategy_id, cand.symbol, klines,
-                                     n_trials=d.validation_n_trials)
+                with span("analysis.validate", symbol=cand.symbol, strategy=decision.strategy_id):
+                    rv = validate_recent(decision.strategy_id, cand.symbol, klines,
+                                         n_trials=d.validation_n_trials)
                 if not rv.tradeable:
                     notes.append(f"{cand.symbol} skipped: failed recent validation ({rv.reason})")
                     continue
