@@ -43,3 +43,27 @@ def frac_diff_last(closes, d: float = 0.5, window: int = 50) -> float:
         return 0.0
     w = _ffd_weights(d, window)
     return float(np.dot(w, np.log(closes[-window:])))
+
+
+def funding_trend(funding_history: list[float]) -> float:
+    """Slope (per step) of recent annualized funding — rising vs falling leverage cost."""
+    f = np.asarray(funding_history, dtype=float)
+    if len(f) < 3:
+        return 0.0
+    x = np.arange(len(f))
+    return float(np.polyfit(x, f, 1)[0])
+
+
+def oi_change_pct(oi_series: list[float]) -> float:
+    """Percent change in open interest over the series (leverage building vs unwinding)."""
+    oi = np.asarray(oi_series, dtype=float)
+    if len(oi) < 2 or oi[0] == 0:
+        return 0.0
+    return float((oi[-1] / oi[0] - 1.0) * 100.0)
+
+
+def basis_pct(perp_price: float, spot_price: float) -> float:
+    """Perp-spot basis as a percent of spot (positive = contango / rich perp)."""
+    if spot_price <= 0:
+        return 0.0
+    return float((perp_price - spot_price) / spot_price * 100.0)

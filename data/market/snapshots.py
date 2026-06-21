@@ -27,6 +27,7 @@ async def build_snapshot(
     if len(klines) < 50:
         return None
 
+    from core.analysis.features import frac_diff_last
     from core.analysis.regime import classify_regime
 
     regime = classify_regime(klines)
@@ -46,6 +47,8 @@ async def build_snapshot(
         annualized_funding_pct=ticker.funding_rate * (24 / 8) * 365 * 100.0,
         regime=regime.trend,
         preferred_family=regime.preferred_family,
+        ob_imbalance=ind.order_book_imbalance(ob),
+        frac_diff=frac_diff_last([k.close for k in klines]),
     )
 
 

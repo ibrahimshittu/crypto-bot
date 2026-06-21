@@ -28,6 +28,8 @@ class InstrumentSnapshot:
     regime: str = "neutral"             # trending | ranging | neutral
     preferred_family: str = ""          # directional | market_neutral
     mtf_confluence: int = 0             # 0–3 timeframes agreeing with the 1h trend
+    ob_imbalance: float = 0.0           # -1 ask-heavy … +1 bid-heavy
+    frac_diff: float = 0.0              # fractionally-differentiated last close (stationary)
 
 
 @dataclass(frozen=True)

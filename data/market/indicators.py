@@ -11,6 +11,14 @@ def _closes(klines: list[Kline]) -> np.ndarray:
     return np.array([k.close for k in klines], dtype=float)
 
 
+def order_book_imbalance(orderbook, depth: int = 10) -> float:
+    """Bid/ask volume imbalance within `depth` levels. +1 bid-heavy, -1 ask-heavy."""
+    bid_vol = sum(s for _, s in orderbook.bids[:depth])
+    ask_vol = sum(s for _, s in orderbook.asks[:depth])
+    total = bid_vol + ask_vol
+    return float((bid_vol - ask_vol) / total) if total > 0 else 0.0
+
+
 def hurst(klines: list[Kline], max_lag: int = 50) -> float:
     """Hurst exponent of the close series. >0.5 trending, <0.5 mean-reverting, ~0.5 random."""
     c = _closes(klines)

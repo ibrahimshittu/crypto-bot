@@ -87,6 +87,7 @@ class LLMStrategyReasoner:
             last_price=snap.last_price, vol=round(snap.realized_vol_pct),
             trend=round(snap.trend_score, 2), zscore=round(snap.zscore, 2),
             regime=snap.regime, confluence=snap.mtf_confluence,
+            ob_imbalance=round(snap.ob_imbalance, 2), funding=round(snap.annualized_funding_pct, 1),
             sent_score=sentiment.sentiment_score, sent_conf=sentiment.confidence,
             facts=sentiment.fact_summary, ceiling=self.ceiling,
         )

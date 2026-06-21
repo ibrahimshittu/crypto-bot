@@ -2,8 +2,15 @@
 
 import numpy as np
 
-from core.analysis.features import frac_diff_last, multiframe_confluence
-from core.execution.exchange import Kline
+from core.analysis.features import (
+    basis_pct,
+    frac_diff_last,
+    funding_trend,
+    multiframe_confluence,
+    oi_change_pct,
+)
+from core.execution.exchange import Kline, OrderBook
+from data.market.indicators import order_book_imbalance
 
 
 def _klines(closes) -> list[Kline]:
@@ -31,3 +38,16 @@ def test_frac_diff_finite():
     closes = np.cumprod(1 + np.random.default_rng(0).normal(0, 0.01, 300)) * 100
     val = frac_diff_last(closes, d=0.5)
     assert np.isfinite(val)
+
+
+def test_order_book_imbalance():
+    bid_heavy = OrderBook("X", bids=[(100, 9000)], asks=[(101, 1000)])
+    assert order_book_imbalance(bid_heavy) > 0.5
+    ask_heavy = OrderBook("X", bids=[(100, 1000)], asks=[(101, 9000)])
+    assert order_book_imbalance(ask_heavy) < -0.5
+
+
+def test_derivatives_helpers():
+    assert funding_trend([0.01, 0.02, 0.03, 0.05]) > 0       # rising funding
+    assert oi_change_pct([1000, 1100]) == 10.0               # +10% OI
+    assert basis_pct(101.0, 100.0) == 1.0                    # 1% contango
