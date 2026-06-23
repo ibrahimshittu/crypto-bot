@@ -167,10 +167,12 @@ class Orchestrator:
             tick = inst.tick_size
             side = "Buy" if decision.target_position > 0 else "Sell"
 
-            # Always set a take-profit. If the strategy/LLM omitted one, derive a 2:1 R:R
-            # target from the entry and stop so no position is left open-ended.
+            # The LLM must analyse and set a take-profit (required field). Defensive backstop:
+            # if it's unusable (non-positive or on the wrong side), derive a 2:1 R:R target.
             take_profit = decision.take_profit
-            if take_profit is None:
+            wrong_side = (side == "Buy" and take_profit <= decision.entry_price) or \
+                         (side == "Sell" and take_profit >= decision.entry_price)
+            if take_profit <= 0 or wrong_side:
                 stop_dist = abs(decision.entry_price - decision.stop_price)
                 take_profit = (decision.entry_price + 2 * stop_dist if side == "Buy"
                                else decision.entry_price - 2 * stop_dist)

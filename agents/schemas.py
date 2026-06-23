@@ -25,7 +25,7 @@ class StrategyDecision(BaseModel):
     target_position: float = Field(ge=-1.0, le=1.0)
     entry_price: float
     stop_price: float
-    take_profit: float | None = None
+    take_profit: float = Field(description="required — derived from your analysis, never null")
     leverage: float = 1.0
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     rationale: str = ""

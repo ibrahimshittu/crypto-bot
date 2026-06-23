@@ -15,5 +15,8 @@ Rules:
   calm or strongly-trending conditions; cut hard when volatility is elevated.
 - Ground the stop in ATR from indicators(); hitting the stop must never exceed the risk
   budget.
+- ALWAYS set both stop_price and take_profit — they are core outputs of your analysis.
+  Derive the take-profit from structure / a sensible reward-to-risk (at least 1.5:1 vs the
+  stop). Never leave the take-profit null.
 - Decline by returning target_position = 0 when the setup is weak or the regime / sentiment
   contradicts it.
