@@ -82,6 +82,35 @@ async def test_circuit_breaker_halts_cycle():
     assert any("HALT" in n for n in decision.notes)
 
 
+async def test_does_not_pile_onto_open_position():
+    ex = PaperExchange(starting_equity=5000.0)
+    _seed_trending_symbol(ex)
+    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.DEMO),
+                       require_validation=False)
+    orch = Orchestrator(deps)
+    orch.set_start_of_day_equity(5000.0)
+
+    await orch.run_cycle()                       # cycle 1 opens a position
+    assert len(await ex.get_positions("linear")) == 1
+    decision = await orch.run_cycle()            # cycle 2 must NOT open another
+    assert decision.n_orders == 0
+    assert any("already holding" in n for n in decision.notes), decision.notes
+
+
+async def test_order_always_has_take_profit():
+    ex = PaperExchange(starting_equity=5000.0)
+    _seed_trending_symbol(ex)
+    deps = TradingDeps(exchange=ex, settings=Settings(trading_env=TradingEnv.DEMO),
+                       require_validation=False)
+    orch = Orchestrator(deps)
+    orch.set_start_of_day_equity(5000.0)
+
+    await orch.run_cycle()
+    assert ex.orders, "expected an order to be placed"
+    assert ex.orders[-1].take_profit is not None
+    assert ex.orders[-1].stop_loss is not None
+
+
 async def test_cycle_does_not_trade_no_edge_symbol():
     from core.validation.online import _clear_cache
 

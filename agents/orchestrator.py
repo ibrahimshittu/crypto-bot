@@ -88,11 +88,15 @@ class Orchestrator:
                 n_pending_approval=0, notes=notes,
             )
 
+        held = {p.symbol for p in portfolio.positions}
         n_signals = n_orders = 0
         for cand in candidates:
             if n_orders >= d.max_new_orders_per_cycle:
                 notes.append(f"reached max {d.max_new_orders_per_cycle} new orders/cycle")
                 break
+            if cand.symbol in held:  # already in a position — don't pile on
+                notes.append(f"{cand.symbol} skipped: already holding a position")
+                continue
 
             klines = await fetch_klines(d.exchange, cand)
             if d.ohlcv_store is not None:
@@ -163,6 +167,14 @@ class Orchestrator:
             tick = inst.tick_size
             side = "Buy" if decision.target_position > 0 else "Sell"
 
+            # Always set a take-profit. If the strategy/LLM omitted one, derive a 2:1 R:R
+            # target from the entry and stop so no position is left open-ended.
+            take_profit = decision.take_profit
+            if take_profit is None:
+                stop_dist = abs(decision.entry_price - decision.stop_price)
+                take_profit = (decision.entry_price + 2 * stop_dist if side == "Buy"
+                               else decision.entry_price - 2 * stop_dist)
+
             # Use the risk engine's ENFORCED (clamped) leverage, not the strategy's raw
             # proposal — this is the hard cap the LLM can't exceed.
             leverage = risk.leverage
@@ -184,7 +196,7 @@ class Orchestrator:
                 order_type="Market",
                 qty=qty,
                 leverage=leverage,
-                take_profit=round_to_tick(decision.take_profit, tick) if decision.take_profit else None,
+                take_profit=round_to_tick(take_profit, tick),
                 stop_loss=round_to_tick(decision.stop_price, tick),
                 strategy_id=decision.strategy_id,
             )

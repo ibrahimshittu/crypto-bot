@@ -28,6 +28,7 @@ class PaperExchange:
         self._tickers: dict[str, Ticker] = {}
         self._books: dict[str, OrderBook] = {}
         self._positions: dict[str, Position] = {}
+        self.orders: list[OrderRequest] = []
         self._klines: dict[str, list[Kline]] = {}
         self._funding: dict[str, list[float]] = {}
         self._oi: dict[str, list[float]] = {}
@@ -86,6 +87,7 @@ class PaperExchange:
         return True
 
     async def place_order(self, req: OrderRequest) -> OrderResult:
+        self.orders.append(req)
         ticker = self._tickers.get(req.symbol)
         if ticker is None:
             return OrderResult(ok=False, order_id=None, symbol=req.symbol, error="no ticker")
